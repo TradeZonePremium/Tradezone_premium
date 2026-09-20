@@ -1,86 +1,90 @@
 import { NextResponse } from "next/server";
+import { getUserFromRequest, isAdminEmail } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { todayIST } from "@/lib/dates";
+import { razorpay } from "@/lib/razorpay";
+import { PLANS, isPlanId } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export async function POST(req: Request) {
+  try {
+    // Only customers who verified their email (Supabase session) can start a payment.
+    const user = await getUserFromRequest(req);
+    if (!user) return NextResponse.json({ error: "Please verify your email first." }, { status: 401 });
 
-/** "https://chat.whatsapp.com/AbCdEf123456" -> "AbCdEf123456" */
-function inviteCode(url: string | undefined): string | null {
-  if (!url) return null;
-  const m = url.trim().match(/chat\.whatsapp\.com\/([A-Za-z0-9]{10,40})/);
-  return m ? m[1] : null;
-}
+    const body = await req.json().catch(() => ({}));
+    const plan = body.plan;
+    if (!isPlanId(plan)) return NextResponse.json({ error: "Invalid plan." }, { status: 400 });
 
-/**
- * Masked WhatsApp link.
- *
- *  /join?token=<join_token>
- *    - not active / bad token  -> redirect to /renew
- *    - active                  -> small page on OUR domain that opens the WhatsApp app
- *                                 directly (whatsapp://chat?code=...). The address bar
- *                                 keeps showing our site, not chat.whatsapp.com.
- *  /join?token=<join_token>&go=1
- *    - fallback button (desktop / no app) -> redirect to the normal invite link.
- *
- * NOTE: nothing can hide the invite from someone who actually joins. This only stops
- * casual sharing. Keep "Approve new participants" ON in the WhatsApp group.
- */
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const token = url.searchParams.get("token") || "";
-  const renew = () => NextResponse.redirect(new URL("/renew", url.origin));
+    // The Rs 1 test plan can only be bought by admins, even if it is left switched on.
+    if (plan === "TEST" && !isAdminEmail(user.email)) {
+      return NextResponse.json({ error: "This plan is not available." }, { status: 403 });
+    }
 
-  if (!UUID.test(token)) return renew();
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const whatsapp = typeof body.whatsapp === "string" ? body.whatsapp.replace(/\D/g, "") : "";
+    const nameOk = name.length >= 2 && name.length <= 100;
+    const waOk = whatsapp.length >= 10 && whatsapp.length <= 15;
 
-  const { data } = await supabaseAdmin()
-    .from("subscriptions")
-    .select("status, expiry_date")
-    .eq("join_token", token)
-    .maybeSingle();
+    const db = supabaseAdmin();
 
-  const active = !!data && data.status === "ACTIVE" && data.expiry_date >= todayIST();
-  const invite = process.env.WHATSAPP_INVITE_URL;
-  const code = inviteCode(invite);
-  if (!active || !invite || !code) return renew();
+    // Find or create the customer row (one row per email).
+    const { data: existing, error: findErr } = await db
+      .from("subscriptions")
+      .select("id")
+      .eq("email", user.email)
+      .maybeSingle();
+    if (findErr) throw findErr;
 
-  // Fallback: normal https invite link (works on desktop / phones without the deep link).
-  if (url.searchParams.get("go") === "1") {
-    const res = NextResponse.redirect(invite);
-    res.headers.set("Cache-Control", "no-store");
-    res.headers.set("Referrer-Policy", "no-referrer");
-    return res;
+    let subscriptionId: string;
+    if (!existing) {
+      if (!nameOk || !waOk) {
+        return NextResponse.json(
+          { error: "Enter your full name and a valid WhatsApp number (10-15 digits)." },
+          { status: 400 }
+        );
+      }
+      const { data: created, error: insErr } = await db
+        .from("subscriptions")
+        .insert({ user_id: user.id, name, email: user.email, whatsapp_number: whatsapp, status: "PENDING" })
+        .select("id")
+        .single();
+      if (insErr) throw insErr;
+      subscriptionId = created.id;
+    } else {
+      subscriptionId = existing.id;
+      const patch: Record<string, unknown> = { user_id: user.id, updated_at: new Date().toISOString() };
+      if (nameOk) patch.name = name;
+      if (waOk) patch.whatsapp_number = whatsapp;
+      await db.from("subscriptions").update(patch).eq("id", subscriptionId);
+    }
+
+    // Price comes from OUR server, never from the browser. Razorpay wants paise.
+    const price = PLANS[plan].price;
+    const order = await razorpay().orders.create({
+      amount: price * 100,
+      currency: "INR",
+      receipt: `tz_${Date.now()}`,
+      notes: { subscription_id: subscriptionId, email: user.email, plan },
+    });
+
+    const { error: payErr } = await db.from("payments").insert({
+      subscription_id: subscriptionId,
+      razorpay_order_id: order.id,
+      plan,
+      amount: price,
+      status: "CREATED",
+    });
+    if (payErr) throw payErr;
+
+    return NextResponse.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+    });
+  } catch (e) {
+    console.error("[orders/create]", e);
+    return NextResponse.json({ error: "Could not start payment. Please try again." }, { status: 500 });
   }
-
-  // token and code are validated above (UUID / letters+digits only), so this is safe to embed.
-  const html = `<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<title>Opening WhatsApp…</title>
-<style>
-  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#EEF3F1;color:#10231F;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-  .box{background:#fff;border:1px solid #CBD8D3;border-radius:14px;padding:28px;max-width:420px;text-align:center}
-  h1{font-family:Georgia,serif;font-size:1.5rem;margin:0 0 8px}
-  p{color:#4B5E58;margin:0}
-  a.btn{display:inline-block;margin-top:18px;background:#F2B01E;color:#10231F;font-weight:700;padding:14px 22px;border-radius:9px;text-decoration:none}
-</style></head>
-<body><div class="box">
-  <h1>Opening WhatsApp…</h1>
-  <p>If WhatsApp does not open by itself, tap the button below.</p>
-  <a class="btn" href="/join?token=${token}&go=1">Open WhatsApp</a>
-</div>
-<script>setTimeout(function(){window.location.href="whatsapp://chat?code=${code}"},50);</script>
-</body></html>`;
-
-  return new Response(html, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-      "Referrer-Policy": "no-referrer",
-      "X-Robots-Tag": "noindex, nofollow",
-    },
-  });
 }
