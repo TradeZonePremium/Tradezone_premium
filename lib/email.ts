@@ -4,7 +4,7 @@ import { formatDate } from "./dates";
 import { planLabel } from "./plans";
 
 // SERVER ONLY.
-const siteUrl = () => (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+const siteUrl = () => (process.env.SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
