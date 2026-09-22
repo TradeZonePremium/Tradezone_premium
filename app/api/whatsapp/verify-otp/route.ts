@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase-server";
 
 export async function POST(req: Request) {
   try {
     const { phone, otp } = await req.json();
     if (!phone || !otp) return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
 
-    const supabase = createServerClient();
-
-    // Find the latest valid OTP
-    const { data: record, error } = await supabase
+    // Find the latest valid OTP using supabaseAdmin
+    const { data: record, error } = await supabaseAdmin
       .from("phone_verifications")
       .select("*")
       .eq("phone", phone)
@@ -23,7 +21,7 @@ export async function POST(req: Request) {
     if (error || !record) return NextResponse.json({ error: "Invalid or expired code." }, { status: 400 });
 
     // Mark as used
-    await supabase.from("phone_verifications").update({ verified: true }).eq("id", record.id);
+    await supabaseAdmin.from("phone_verifications").update({ verified: true }).eq("id", record.id);
 
     return NextResponse.json({ success: true, phone });
   } catch (err: any) {
