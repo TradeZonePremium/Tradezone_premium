@@ -14,25 +14,25 @@ export async function GET(req: Request) {
 
     const db = supabaseAdmin();
 
-    // Verify token exists in your database
+    // 1. Secure database lookup to verify the token exists
     const { data: sub, error } = await db
       .from("subscriptions")
-      .select("id, status, whatsapp_invite_link")
+      .select("id, status")
       .eq("join_token", token)
       .maybeSingle();
 
     if (error || !sub) {
-      return NextResponse.json({ error: "Invalid or expired link" }, { status: 404 });
+      return NextResponse.json({ error: "Invalid or expired link." }, { status: 404 });
     }
 
-    // Default WhatsApp group link fallback
-    const targetUrl = sub.whatsapp_invite_link || process.env.WHATSAPP_GROUP_INVITE_URL;
+    // 2. Pull your secure WhatsApp group invite link from Vercel environment variables
+    const targetUrl = process.env.WHATSAPP_GROUP_INVITE_URL;
 
     if (!targetUrl) {
-      return NextResponse.json({ error: "Group invite link not configured" }, { status: 500 });
+      return NextResponse.json({ error: "WhatsApp group link not configured." }, { status: 500 });
     }
 
-    // Redirect the user directly to WhatsApp
+    // 3. Securely redirect to the WhatsApp group
     return NextResponse.redirect(targetUrl);
     
   } catch (err: any) {
