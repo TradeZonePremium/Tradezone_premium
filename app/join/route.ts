@@ -6,7 +6,7 @@ import { PLANS, isPlanId } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
     // Only customers who verified their email (Supabase session) can start a payment.
     const user = await getUserFromRequest(req);
