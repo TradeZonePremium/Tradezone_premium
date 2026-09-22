@@ -12,6 +12,13 @@ export async function GET(req: Request) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
+  console.log("WhatsApp verification:", {
+  mode,
+  hasVerifyToken: !!VERIFY_TOKEN,
+  tokenMatches: token === VERIFY_TOKEN,
+  hasChallenge: !!challenge,
+});
+
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     return new Response(challenge, { status: 200 });
   }
