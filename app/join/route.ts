@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     // Only customers who verified their email (Supabase session) can start a payment.
-    // const user = await getUserFromRequest(req);
-    // if (!user) return NextResponse.json({ error: "Please verify your email first." }, { status: 401 });
+    const user = await getUserFromRequest(req);
+    if (!user) return NextResponse.json({ error: "Please verify your email first." }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
     const plan = body.plan;
