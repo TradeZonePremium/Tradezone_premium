@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase-server";
 
 export async function POST(req: Request) {
   try {
@@ -9,9 +9,8 @@ export async function POST(req: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
     
-    // 1. Save to Supabase using service role to bypass RLS
-    const supabase = createServerClient();
-    const { error: dbError } = await supabase.from("phone_verifications").insert({
+    // 1. Save to Supabase using supabaseAdmin to bypass RLS
+    const { error: dbError } = await supabaseAdmin.from("phone_verifications").insert({
       phone,
       otp_code: otp,
       expires_at: expiresAt,
