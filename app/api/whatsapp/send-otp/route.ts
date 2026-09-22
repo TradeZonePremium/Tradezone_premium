@@ -9,8 +9,8 @@ export async function POST(req: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
     
-    // 1. Save to Supabase using supabaseAdmin to bypass RLS
-    const { error: dbError } = await supabaseAdmin.from("phone_verifications").insert({
+    // Fix: Call supabaseAdmin as a function ()
+    const { error: dbError } = await supabaseAdmin().from("phone_verifications").insert({
       phone,
       otp_code: otp,
       expires_at: expiresAt,
