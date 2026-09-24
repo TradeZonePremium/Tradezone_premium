@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
     
-    // Fix: Call supabaseAdmin as a function ()
+    // Save OTP to Supabase database
     const { error: dbError } = await supabaseAdmin().from("phone_verifications").insert({
       phone,
       otp_code: otp,
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
     if (dbError) throw new Error("Database error saving OTP");
 
-    // 2. Send via Meta WhatsApp Cloud API
+    // Send via Meta WhatsApp Cloud API
     const res = await fetch(`https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
       method: "POST",
       headers: {
@@ -30,11 +30,15 @@ export async function POST(req: Request) {
         to: phone,
         type: "template",
         template: {
-          name: process.env.WHATSAPP_OTP_TEMPLATE_NAME || "phone_verification_otp",
+          name: process.env.WHATSAPP_OTP_TEMPLATE_NAME || "tradezone_premium_update",
           language: { code: "en" },
           components: [
-            { type: "body", parameters: [{ type: "text", text: otp }] },
-            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] },
+            { 
+              type: "body", 
+              parameters: [
+                { type: "text", text: otp }
+              ] 
+            }
           ],
         },
       }),
