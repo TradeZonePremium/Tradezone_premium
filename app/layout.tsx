@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Trade Zone Premium",
+  title: "Trade Zone Premium | Stock Market Education",
   description:
-    "Join the Trade Zone Premium WhatsApp group. Verify your email, pay securely, get your invite.",
+    "Trade Zone Premium is a financial-market learning community focused on stock market education, technical analysis concepts, market study and risk management.",
   other: {
     "facebook-domain-verification": "0s3dutshsx4mofnq5uz6oh3gb2rgj2",
   },
