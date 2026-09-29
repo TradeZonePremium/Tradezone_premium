@@ -1,6 +1,6 @@
 const GRAPH_API_VERSION = "v23.0";
 
-export async function sendPremiumGroupInvite(to: string) {
+export async function sendPremiumGroupInvite(to: string, groupLink?: string) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const templateName = process.env.WHATSAPP_INVITE_TEMPLATE_NAME;
@@ -15,6 +15,21 @@ export async function sendPremiumGroupInvite(to: string) {
   if (recipient.length < 10 || recipient.length > 15) {
     throw new Error("Invalid WhatsApp recipient number.");
   }
+
+  // Build template body components if a group link is provided
+  const components = groupLink
+    ? [
+        {
+          type: "body",
+          parameters: [
+            {
+              type: "text",
+              text: groupLink,
+            },
+          ],
+        },
+      ]
+    : undefined;
 
   const response = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
@@ -34,6 +49,7 @@ export async function sendPremiumGroupInvite(to: string) {
           language: {
             code: language,
           },
+          ...(components && { components }),
         },
       }),
     }
