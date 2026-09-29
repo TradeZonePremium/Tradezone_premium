@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getUserFromRequest } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { verifyPaymentSignature } from "@/lib/razorpay";
 import { activatePayment } from "@/lib/activate";
@@ -8,13 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const user = await getUserFromRequest(req);
-    if (!user) return NextResponse.json({ error: "Not logged in." }, { status: 401 });
-
     const body = await req.json().catch(() => ({}));
     const orderId = String(body.razorpay_order_id || "");
     const paymentId = String(body.razorpay_payment_id || "");
     const signature = String(body.razorpay_signature || "");
+    
     if (!orderId || !paymentId || !signature) {
       return NextResponse.json({ error: "Missing payment details." }, { status: 400 });
     }
@@ -24,17 +21,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Payment verification failed." }, { status: 400 });
     }
 
-    // 2) Make sure this order belongs to the logged-in customer.
     const db = supabaseAdmin();
-    const { data: row } = await db
+
+    // 2) Make sure this order exists in our payments table and retrieve its subscription ID
+    const { data: row, error: rowErr } = await db
       .from("payments")
-      .select("subscription_id, subscriptions!inner(email)")
+      .select("subscription_id, subscriptions!inner(id, whatsapp_number, plan)")
       .eq("razorpay_order_id", orderId)
       .maybeSingle();
-    const owner = (row as unknown as { subscriptions?: { email?: string } } | null)?.subscriptions?.email;
-    if (!row || owner?.toLowerCase() !== user.email) {
+
+    if (rowErr || !row) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
+
+    const subscriptionData = row.subscriptions as unknown as { id: string; whatsapp_number: string; plan: string };
 
     // 3) Activate (idempotent - safe if the webhook already did it).
     const result = await activatePayment(orderId, paymentId);
@@ -46,11 +46,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: sub } = await db
+    // 4) Fetch the updated subscription details to return to the frontend
+    const { data: sub, error: subErr } = await db
       .from("subscriptions")
       .select("plan, start_date, expiry_date, status")
-      .eq("email", user.email)
+      .eq("id", subscriptionData.id)
       .single();
+
+    if (subErr || !sub) {
+      return NextResponse.json({ error: "Subscription record could not be retrieved." }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true, subscription: sub });
   } catch (e) {
