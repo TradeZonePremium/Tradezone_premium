@@ -2,8 +2,7 @@ import { supabaseAdmin } from "./supabase-server";
 import { addMonths, maxDate, todayIST } from "./dates";
 import { PLANS, isPlanId } from "./plans";
 import { sendPremiumGroupInvite } from "./whatsapp";
-// Import your email sending function here (adjust path if needed, e.g., '@/lib/email')
-// import { sendEmail } from "./email";
+import { sendEmail } from "./email"; // Ensure your email utility is imported
 
 export type ActivateResult =
   | { ok: true; alreadyProcessed: boolean }
@@ -137,12 +136,13 @@ export async function activatePayment(
     };
   }
 
-  // 5) Send WhatsApp group invitation AND Email notification simultaneously.
-  // Payment remains successful even if notification delivery fails.
+  // 5) Dual Post-Payment Delivery: Send WhatsApp group invite AND Email notification simultaneously.
   try {
-    // A) Send via WhatsApp
+    const inviteLink = "https://chat.whatsapp.com/YourActualGroupInviteLink"; // Replace with your group link
+
+    // A) Send via WhatsApp Template
     if (sub.whatsapp_number) {
-      await sendPremiumGroupInvite(sub.whatsapp_number);
+      await sendPremiumGroupInvite(sub.whatsapp_number, inviteLink);
       console.log("[activate] WhatsApp group invitation sent.");
     } else {
       console.error("[activate] WhatsApp number is missing.");
@@ -150,15 +150,14 @@ export async function activatePayment(
 
     // B) Send via Email
     if (sub.email) {
-      // Uncomment and use your project's email dispatcher here:
-      /*
       await sendEmail({
         to: sub.email,
-        subject: "Your Trade Zone Premium Access Link",
-        text: "Your payment was successful! Check your WhatsApp or community dashboard for your group access link."
+        subject: "Your Trade Zone Premium Group Invite Link",
+        text: `Payment successful! Thank you for joining Trade Zone Premium. Access your private community group here: ${inviteLink}`
       });
-      */
       console.log("[activate] Email notification dispatched.");
+    } else {
+      console.error("[activate] Email address is missing.");
     }
   } catch (err) {
     console.error("[activate] Notification delivery failed:", err);
