@@ -28,23 +28,26 @@ export async function POST(req: Request) {
 
     const db = supabaseAdmin();
 
-    // 1) EITHER/OR AUTH CHECK:
-    // Check if user has an active email session via Supabase
+    // EITHER/OR AUTH CHECK:
+    // 1) Check if user has an active email session via Supabase
     const user = await getUserFromRequest(req).catch(() => null);
     const hasEmailSession = !!user?.email;
 
-    // Check if user has a verified WhatsApp OTP record
-    const { data: verification } = await db
-      .from("phone_verifications")
-      .select("*")
-      .eq("phone", whatsapp)
-      .order("expires_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 2) Check if user has a verified WhatsApp OTP record
+    let hasValidWhatsapp = false;
+    if (whatsapp) {
+      const { data: verification } = await db
+        .from("phone_verifications")
+        .select("*")
+        .eq("phone", whatsapp)
+        .order("expires_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    const hasValidWhatsapp = verification && new Date() <= new Date(verification.expires_at);
+      hasValidWhatsapp = !!verification && new Date() <= new Date(verification.expires_at);
+    }
 
-    // If NEITHER method is verified, block the order creation
+    // If NEITHER method is verified, block order creation
     if (!hasEmailSession && !hasValidWhatsapp) {
       return NextResponse.json(
         { error: "Please verify either your email or your WhatsApp number with OTP to continue." },
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
     // Determine the primary identifier for the subscription row
     const userEmail = user?.email || emailInput || null;
 
-    // 2) Find or create the customer row safely
+    // Find or create the customer row safely
     let subscriptionId: string;
     const { data: existing, error: findErr } = await db
       .from("subscriptions")
@@ -90,7 +93,7 @@ export async function POST(req: Request) {
       await db.from("subscriptions").update(patch).eq("id", subscriptionId);
     }
 
-    // 3) Create Razorpay Order
+    // Create Razorpay Order
     const price = PLANS[plan].price;
     const order = await razorpay().orders.create({
       amount: price * 100,
