@@ -98,9 +98,7 @@ export default function RegisterFlow() {
 
         <p>
           Your{" "}
-          <b>
-            {PLANS[done.plan as PlanId]?.label}
-          </b>{" "}
+          <b>{PLANS[done.plan as PlanId]?.label}</b>{" "}
           subscription is active until{" "}
           <b>{formatDate(done.expiry_date)}</b>.
         </p>
@@ -137,8 +135,8 @@ export default function RegisterFlow() {
         </button>
 
         <p className="hint center">
-          Next, we ask for your details and verify your
-          WhatsApp number.
+          Next, we ask for your details and verify your WhatsApp
+          number.
         </p>
       </div>
 
@@ -172,22 +170,13 @@ export default function RegisterFlow() {
             id="name"
             autoComplete="name"
             value={name}
-            onChange={(e) =>
-              setName(e.target.value)
-            }
+            onChange={(e) => setName(e.target.value)}
             placeholder="Your full name"
           />
         </div>
 
         {/* WHATSAPP */}
         <div className="field">
-          <label
-            className="label"
-            htmlFor="wa"
-          >
-            WhatsApp number
-          </label>
-
           <WhatsAppOtp
             defaultPhone={whatsapp}
             onPhoneChange={setWhatsapp}
@@ -214,9 +203,7 @@ export default function RegisterFlow() {
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(e) =>
-              setEmail(e.target.value)
-            }
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
           />
 
