@@ -24,9 +24,8 @@ function button(label: string, href: string): string {
 
 /**
  * Sends one email. Provider is chosen by env variables:
- *   1) SMTP_HOST set      -> SMTP via nodemailer (Gmail, client's mailbox, any SMTP server)
+ *   1) SMTP_HOST set     -> SMTP via nodemailer (Gmail, client's mailbox, any SMTP server)
  *   2) RESEND_API_KEY set -> Resend API
- * To change the sender later (e.g. to the client's email), only change .env.local.
  */
 async function send(to: string, subject: string, html: string): Promise<boolean> {
   const from = process.env.EMAIL_FROM;
@@ -41,7 +40,7 @@ async function send(to: string, subject: string, html: string): Promise<boolean>
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port,
-        secure: port === 465, // 465 = SSL, 587 = STARTTLS
+        secure: port === 465,
         auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
       });
       await transporter.sendMail({ from, to, subject, html });
@@ -64,6 +63,14 @@ async function send(to: string, subject: string, html: string): Promise<boolean>
     console.error("[email] send failed:", e);
     return false;
   }
+}
+
+/**
+ * Generic sendEmail helper used by activation pipelines.
+ */
+export async function sendEmail(p: { to: string; subject: string; text: string }): Promise<boolean> {
+  const html = layout(`<p>${esc(p.text).replace(/\n/g, "<br/>")}</p>`);
+  return send(p.to, p.subject, html);
 }
 
 export function joinUrl(token: string): string {
