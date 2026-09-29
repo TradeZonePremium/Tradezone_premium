@@ -2,6 +2,7 @@ import { supabaseAdmin } from "./supabase-server";
 import { addMonths, maxDate, todayIST } from "./dates";
 import { PLANS, isPlanId } from "./plans";
 import { sendPaymentSuccessEmail } from "./email";
+import { sendPremiumGroupInvite } from "./whatsapp";
 
 export type ActivateResult =
   | { ok: true; alreadyProcessed: boolean }
@@ -91,16 +92,28 @@ export async function activatePayment(orderId: string, paymentId: string): Promi
     return { ok: false, error: updErr.message };
   }
 
-  // 4) Confirmation email (a failed email must not undo a successful payment).
-  await sendPaymentSuccessEmail({
-    to: sub.email,
-    name: sub.name,
-    plan: claimed.plan,
-    amount: claimed.amount,
-    startDate,
-    expiryDate,
-    joinToken: sub.join_token,
-  });
+  // 4) Send WhatsApp group invitation.
+// A failed WhatsApp delivery must not undo a successful payment.
+try {
+  if (sub.whatsapp_number) {
+    await sendPremiumGroupInvite(sub.whatsapp_number);
+  } else {
+    console.error("[activate] WhatsApp number is missing.");
+  }
+} catch (err) {
+  console.error("[activate] WhatsApp invite failed:", err);
+}
 
-  return { ok: true, alreadyProcessed: false };
+// Keep email confirmation as backup for testing.
+await sendPaymentSuccessEmail({
+  to: sub.email,
+  name: sub.name,
+  plan: claimed.plan,
+  amount: claimed.amount,
+  startDate,
+  expiryDate,
+  joinToken: sub.join_token,
+});
+
+return { ok: true, alreadyProcessed: false };
 }
