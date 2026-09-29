@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import EmailOtp from "./EmailOtp";
 import WhatsAppOtp from "./WhatsAppOtp";
 import PlanPicker from "./PlanPicker";
 
@@ -16,14 +15,11 @@ export default function RegisterFlow() {
   const [plan, setPlan] = useState<PlanId>("1M");
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [unverifiedEmail, setUnverifiedEmail] = useState("");
+  const [email, setEmail] = useState("");
 
-  const [method, setMethod] = useState<"email" | "whatsapp">("email");
-
-  const [verifiedIdentifier, setVerifiedIdentifier] = useState<{
-    type: "email" | "whatsapp";
-    value: string;
-  } | null>(null);
+  const [verifiedWhatsapp, setVerifiedWhatsapp] = useState<string | null>(
+    null
+  );
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -41,43 +37,33 @@ export default function RegisterFlow() {
     waDigits.length >= 10 &&
     waDigits.length <= 15;
 
-  // If verified via WhatsApp, we still need a valid email for the DB/Razorpay.
-  const hasRequiredEmail =
-    verifiedIdentifier?.type === "email" ||
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(unverifiedEmail);
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   async function pay() {
     setError("");
 
+    if (!name.trim() || name.trim().length < 2) {
+      return setError("Enter your full name.");
+    }
+
     if (!detailsOk) {
       return setError(
-        "Enter your full name and a valid WhatsApp number (10-15 digits)."
+        "Enter a valid WhatsApp number (10-15 digits)."
       );
     }
 
-    if (!verifiedIdentifier) {
-      return setError(
-        `Verify your ${
-          method === "whatsapp" ? "WhatsApp number" : "email"
-        } first.`
-      );
+    if (!verifiedWhatsapp) {
+      return setError("Please verify your WhatsApp number first.");
     }
 
-    if (!hasRequiredEmail) {
-      return setError("A valid email address is required for your receipt.");
+    if (!validEmail) {
+      return setError("Enter a valid email address.");
     }
 
     setBusy(true);
 
-    const finalEmail =
-      verifiedIdentifier.type === "email"
-        ? verifiedIdentifier.value
-        : unverifiedEmail.trim().toLowerCase();
-
-    const finalWhatsapp =
-      verifiedIdentifier.type === "whatsapp"
-        ? verifiedIdentifier.value
-        : waDigits;
+    const finalWhatsapp = verifiedWhatsapp;
+    const finalEmail = email.trim().toLowerCase();
 
     try {
       const result = await startCheckout({
@@ -96,7 +82,9 @@ export default function RegisterFlow() {
       }
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Something went wrong."
+        e instanceof Error
+          ? e.message
+          : "Something went wrong."
       );
     } finally {
       setBusy(false);
@@ -110,7 +98,9 @@ export default function RegisterFlow() {
 
         <p>
           Your{" "}
-          <b>{PLANS[done.plan as PlanId]?.label}</b>{" "}
+          <b>
+            {PLANS[done.plan as PlanId]?.label}
+          </b>{" "}
           subscription is active until{" "}
           <b>{formatDate(done.expiry_date)}</b>.
         </p>
@@ -129,6 +119,7 @@ export default function RegisterFlow() {
       className="card"
       aria-label="Choose a plan and register"
     >
+      {/* PLAN */}
       <div hidden={stage !== "plan"}>
         <h2>Choose your plan</h2>
 
@@ -146,10 +137,12 @@ export default function RegisterFlow() {
         </button>
 
         <p className="hint center">
-          Next, we ask for your details and verify your account.
+          Next, we ask for your details and verify your
+          WhatsApp number.
         </p>
       </div>
 
+      {/* DETAILS */}
       <div hidden={stage !== "details"}>
         <button
           type="button"
@@ -166,8 +159,12 @@ export default function RegisterFlow() {
 
         <h2>Your details</h2>
 
+        {/* NAME */}
         <div className="field">
-          <label className="label" htmlFor="name">
+          <label
+            className="label"
+            htmlFor="name"
+          >
             Full name
           </label>
 
@@ -175,134 +172,60 @@ export default function RegisterFlow() {
             id="name"
             autoComplete="name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) =>
+              setName(e.target.value)
+            }
             placeholder="Your full name"
           />
         </div>
 
-        {/* Verification Toggle */}
+        {/* WHATSAPP */}
         <div className="field">
-          <label className="label">
-            Verification Method
+          <label
+            className="label"
+            htmlFor="wa"
+          >
+            WhatsApp number
           </label>
 
-          <div
-            className="row"
-            style={{
-              gap: "8px",
-              marginBottom: "16px",
-            }}
-          >
-            <button
-              type="button"
-              className={`btn ${
-                method === "email"
-                  ? "btn-dark"
-                  : "btn-ghost"
-              }`}
-              onClick={() => {
-                setMethod("email");
-                setVerifiedIdentifier(null);
-              }}
-              style={{ flex: 1 }}
-            >
-              Verify Email
-            </button>
-
-            <button
-              type="button"
-              className={`btn ${
-                method === "whatsapp"
-                  ? "btn-dark"
-                  : "btn-ghost"
-              }`}
-              onClick={() => {
-                setMethod("whatsapp");
-                setVerifiedIdentifier(null);
-              }}
-              style={{ flex: 1 }}
-            >
-              Verify WhatsApp
-            </button>
-          </div>
+          <WhatsAppOtp
+            defaultPhone={whatsapp}
+            onPhoneChange={setWhatsapp}
+            onVerified={(phone) =>
+              setVerifiedWhatsapp(phone)
+            }
+            onReset={() =>
+              setVerifiedWhatsapp(null)
+            }
+          />
         </div>
 
-        {method === "email" ? (
-          <>
-            <div className="field">
-              <label
-                className="label"
-                htmlFor="wa"
-              >
-                WhatsApp number
-              </label>
+        {/* EMAIL */}
+        <div className="field">
+          <label
+            className="label"
+            htmlFor="email-input"
+          >
+            Email Address
+          </label>
 
-              <input
-                id="wa"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={whatsapp}
-                onChange={(e) =>
-                  setWhatsapp(e.target.value)
-                }
-                placeholder="e.g. 9876543210"
-              />
-            </div>
+          <input
+            id="email-input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) =>
+              setEmail(e.target.value)
+            }
+            placeholder="you@example.com"
+          />
 
-            <EmailOtp
-              onVerified={({ email }) =>
-                setVerifiedIdentifier({
-                  type: "email",
-                  value: email,
-                })
-              }
-              onReset={() =>
-                setVerifiedIdentifier(null)
-              }
-            />
-          </>
-        ) : (
-          <>
-            <div className="field">
-              <label
-                className="label"
-                htmlFor="email-input"
-              >
-                Email Address
-              </label>
+          <p className="hint">
+            Required for your payment receipt.
+          </p>
+        </div>
 
-              <input
-                id="email-input"
-                type="email"
-                value={unverifiedEmail}
-                onChange={(e) =>
-                  setUnverifiedEmail(e.target.value)
-                }
-                placeholder="you@example.com"
-              />
-
-              <p className="hint">
-                Required for payment receipts.
-              </p>
-            </div>
-
-            <WhatsAppOtp
-              defaultPhone={whatsapp}
-              onPhoneChange={setWhatsapp}
-              onVerified={(phone) =>
-                setVerifiedIdentifier({
-                  type: "whatsapp",
-                  value: phone,
-                })
-              }
-              onReset={() =>
-                setVerifiedIdentifier(null)
-              }
-            />
-          </>
-        )}
-
+        {/* ERROR */}
         {error && (
           <p
             className="error"
@@ -312,15 +235,16 @@ export default function RegisterFlow() {
           </p>
         )}
 
+        {/* PAYMENT */}
         <button
           type="button"
           className="btn btn-primary wide"
           onClick={pay}
           disabled={
             busy ||
-            !verifiedIdentifier ||
+            !verifiedWhatsapp ||
             !detailsOk ||
-            !hasRequiredEmail
+            !validEmail
           }
         >
           {busy
