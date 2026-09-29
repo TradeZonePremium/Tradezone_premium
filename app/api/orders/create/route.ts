@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserFromRequest } from "@/lib/auth"; // Re-enable auth check
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { razorpay } from "@/lib/razorpay";
 import { PLANS, isPlanId } from "@/lib/plans";
@@ -7,13 +8,18 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    // 1) Enforce email/Supabase session login requirement
+    const user = await getUserFromRequest(req);
+    if (!user) {
+      return NextResponse.json({ error: "Please verify your email first." }, { status: 401 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const plan = body.plan;
     if (!isPlanId(plan)) return NextResponse.json({ error: "Invalid plan." }, { status: 400 });
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const whatsapp = typeof body.whatsapp === "string" ? body.whatsapp.replace(/\D/g, "") : "";
-    const email = typeof body.email === "string" ? body.email.trim() : "";
     
     const nameOk = name.length >= 2 && name.length <= 100;
     const waOk = whatsapp.length >= 10 && whatsapp.length <= 15;
@@ -27,7 +33,7 @@ export async function POST(req: Request) {
 
     const db = supabaseAdmin();
 
-    // STRICT CHECK: Verify that this WhatsApp number has completed OTP verification
+    // 2) STRICT CHECK: Verify that this WhatsApp number has completed OTP verification
     const { data: verification, error: verError } = await db
       .from("phone_verifications")
       .select("*")
@@ -44,11 +50,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "WhatsApp verification expired. Please request a new OTP." }, { status: 401 });
     }
 
-    // Find or create the customer row based on the WhatsApp number or email
+    // 3) Find or create the customer row tied to the user's email
     const { data: existing, error: findErr } = await db
       .from("subscriptions")
       .select("id")
-      .eq("whatsapp_number", whatsapp)
+      .eq("email", user.email)
       .maybeSingle();
     if (findErr) throw findErr;
 
@@ -57,8 +63,9 @@ export async function POST(req: Request) {
       const { data: created, error: insErr } = await db
         .from("subscriptions")
         .insert({ 
+          user_id: user.id,
           name, 
-          email: email || null, 
+          email: user.email, 
           whatsapp_number: whatsapp, 
           status: "PENDING" 
         })
@@ -68,19 +75,20 @@ export async function POST(req: Request) {
       subscriptionId = created.id;
     } else {
       subscriptionId = existing.id;
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (nameOk) patch.name = name;
-      if (email) patch.email = email;
-      await db.from("subscriptions").update(patch).eq("id", subscriptionId);
+      await db.from("subscriptions").update({
+        user_id: user.id,
+        name,
+        whatsapp_number: whatsapp,
+        updated_at: new Date().toISOString()
+      }).eq("id", subscriptionId);
     }
 
-    // Price comes from OUR server, never from the browser. Razorpay wants paise.
     const price = PLANS[plan].price;
     const order = await razorpay().orders.create({
       amount: price * 100,
       currency: "INR",
       receipt: `tz_${Date.now()}`,
-      notes: { subscription_id: subscriptionId, whatsapp, plan },
+      notes: { subscription_id: subscriptionId, email: user.email, plan },
     });
 
     const { error: payErr } = await db.from("payments").insert({
