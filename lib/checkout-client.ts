@@ -1,6 +1,5 @@
 "use client";
 
-import { supabaseBrowser } from "./supabase-browser";
 import { PLANS, type PlanId } from "./plans";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -37,16 +36,18 @@ export async function startCheckout(opts: {
   whatsapp?: string;
   prefill: { name?: string; email: string; contact?: string };
 }): Promise<CheckoutResult> {
-  const { data } = await supabaseBrowser().auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error("Your session expired. Please verify your email again.");
-
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  // No email session required anymore. We rely on verified WhatsApp number.
+  const headers = { "Content-Type": "application/json" };
 
   const orderRes = await fetch("/api/orders/create", {
     method: "POST",
     headers,
-    body: JSON.stringify({ plan: opts.plan, name: opts.name, whatsapp: opts.whatsapp }),
+    body: JSON.stringify({ 
+      plan: opts.plan, 
+      name: opts.name, 
+      whatsapp: opts.whatsapp || opts.prefill.contact,
+      email: opts.prefill.email 
+    }),
   });
   const order = await orderRes.json();
   if (!orderRes.ok) throw new Error(order.error || "Could not start payment.");
@@ -55,7 +56,7 @@ export async function startCheckout(opts: {
   if (!loaded || !window.Razorpay) throw new Error("Could not load Razorpay. Check your internet and try again.");
 
   // Razorpay likes the number with country code. 10 digits = Indian number.
-  const digits = (opts.prefill.contact || "").replace(/\D/g, "");
+  const digits = (opts.prefill.contact || opts.whatsapp || "").replace(/\D/g, "");
   const contact = digits ? (digits.length === 10 ? `+91${digits}` : `+${digits}`) : undefined;
 
   return new Promise<CheckoutResult>((resolve, reject) => {
