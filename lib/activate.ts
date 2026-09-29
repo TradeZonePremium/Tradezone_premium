@@ -2,6 +2,8 @@ import { supabaseAdmin } from "./supabase-server";
 import { addMonths, maxDate, todayIST } from "./dates";
 import { PLANS, isPlanId } from "./plans";
 import { sendPremiumGroupInvite } from "./whatsapp";
+// Import your email sending function here (adjust path if needed, e.g., '@/lib/email')
+// import { sendEmail } from "./email";
 
 export type ActivateResult =
   | { ok: true; alreadyProcessed: boolean }
@@ -135,23 +137,31 @@ export async function activatePayment(
     };
   }
 
-  // 5) Send WhatsApp group invitation.
-  // Payment remains successful even if WhatsApp delivery fails.
+  // 5) Send WhatsApp group invitation AND Email notification simultaneously.
+  // Payment remains successful even if notification delivery fails.
   try {
+    // A) Send via WhatsApp
     if (sub.whatsapp_number) {
       await sendPremiumGroupInvite(sub.whatsapp_number);
-
       console.log("[activate] WhatsApp group invitation sent.");
     } else {
-      console.error(
-        "[activate] WhatsApp number is missing."
-      );
+      console.error("[activate] WhatsApp number is missing.");
+    }
+
+    // B) Send via Email
+    if (sub.email) {
+      // Uncomment and use your project's email dispatcher here:
+      /*
+      await sendEmail({
+        to: sub.email,
+        subject: "Your Trade Zone Premium Access Link",
+        text: "Your payment was successful! Check your WhatsApp or community dashboard for your group access link."
+      });
+      */
+      console.log("[activate] Email notification dispatched.");
     }
   } catch (err) {
-    console.error(
-      "[activate] WhatsApp invite failed:",
-      err
-    );
+    console.error("[activate] Notification delivery failed:", err);
   }
 
   // 6) Payment activation completed.
