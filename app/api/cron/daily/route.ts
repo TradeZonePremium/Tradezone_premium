@@ -6,14 +6,6 @@ import { sendExpiredEmail, sendReminderEmail } from "@/lib/email";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/**
- * Runs once a day (see vercel.json).
- *  1) 3-day reminder for ACTIVE subscriptions that expire within 3 days
- *  2) Mark expired subscriptions as EXPIRED and email the customer
- *
- * Protected: requests must send  Authorization: Bearer <CRON_SECRET>
- * (Vercel Cron adds this header automatically when CRON_SECRET is set.)
- */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -24,6 +16,8 @@ export async function GET(req: Request) {
   const today = todayIST();
   const in3 = addDays(today, 3);
   const summary = { reminders: 0, expired: 0, errors: 0 };
+  
+  const adminEmail = process.env.ADMIN_EMAIL; // Ensure this is set in Vercel
 
   // ---- 1) Reminders: expiry between today and today+3, not yet reminded ----
   const { data: dueSoon, error: soonErr } = await db
@@ -33,21 +27,34 @@ export async function GET(req: Request) {
     .eq("reminder_sent", false)
     .gte("expiry_date", today)
     .lte("expiry_date", in3);
+    
   if (soonErr) {
     console.error("[cron] reminder query", soonErr);
     summary.errors++;
   }
 
   for (const s of dueSoon || []) {
+    const daysLeft = daysBetween(today, s.expiry_date);
     const ok = await sendReminderEmail({
       to: s.email,
       name: s.name,
       expiryDate: s.expiry_date,
-      daysLeft: daysBetween(today, s.expiry_date),
+      daysLeft,
     });
+    
     if (ok) {
       await db.from("subscriptions").update({ reminder_sent: true }).eq("id", s.id);
       summary.reminders++;
+      
+      // Send CC to Admin
+      if (adminEmail) {
+        await sendReminderEmail({
+          to: adminEmail,
+          name: `Admin Alert (User: ${s.name} - ${s.email})`,
+          expiryDate: s.expiry_date,
+          daysLeft,
+        });
+      }
     } else {
       summary.errors++; // stays false, so tomorrow's run retries
     }
@@ -59,13 +66,13 @@ export async function GET(req: Request) {
     .select("id, name, email")
     .eq("status", "ACTIVE")
     .lt("expiry_date", today);
+    
   if (lapsedErr) {
     console.error("[cron] expiry query", lapsedErr);
     summary.errors++;
   }
 
   for (const s of lapsed || []) {
-    // Conditional update: only one run can flip ACTIVE -> EXPIRED.
     const { data: flipped } = await db
       .from("subscriptions")
       .update({ status: "EXPIRED", updated_at: new Date().toISOString() })
@@ -73,6 +80,7 @@ export async function GET(req: Request) {
       .eq("status", "ACTIVE")
       .select("id")
       .maybeSingle();
+      
     if (!flipped) continue;
 
     summary.expired++;
