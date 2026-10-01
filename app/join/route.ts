@@ -14,23 +14,34 @@ export async function GET(req: Request) {
 
     const db = supabaseAdmin();
 
-    // 1. Secure database lookup to verify the token exists
+    // 1. Look up the token (checking for both the original token and the secret 1st-use marker)
     const { data: sub, error } = await db
       .from("subscriptions")
-      .select("id, status")
-      .eq("join_token", token)
+      .select("id, status, join_token")
+      .or(`join_token.eq.${token},join_token.eq.${token}_1`)
       .maybeSingle();
 
     if (error || !sub) {
-      // Return a user-friendly HTML error message instead of raw JSON
+      // Generic error message that completely hides the usage limit rules
       return new Response(
-        "<h2>Invalid, expired, or already used access link.</h2><p>Each link is valid for one-time use only. If you need a new link, please contact support.</p>", 
+        "<h2>Invalid, expired, or already used access link.</h2><p>If you need a new link, please contact support.</p>", 
         { status: 404, headers: { "Content-Type": "text/html" } }
       );
     }
 
-    // 2. ONE-TIME USE ENFORCEMENT: Nullify the token so it can never be used again
-    await db.from("subscriptions").update({ join_token: null }).eq("id", sub.id);
+    // 2. SECRET 2-TIME USE LOGIC
+    // If the token perfectly matches the URL, it's the 1st click. Append "_1".
+    // If the token in the DB already has "_1", it's the 2nd click. Wipe it out (null).
+    const nextTokenValue = sub.join_token === token ? `${token}_1` : null;
+
+    const { error: updateErr } = await db
+      .from("subscriptions")
+      .update({ join_token: nextTokenValue })
+      .eq("id", sub.id);
+
+    if (updateErr) {
+      console.error("[join] Failed to update token:", updateErr);
+    }
 
     // 3. Pull your secure WhatsApp group invite link
     const targetUrl = process.env.WHATSAPP_GROUP_INVITE_URL;
