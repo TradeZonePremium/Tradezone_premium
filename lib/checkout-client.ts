@@ -1,7 +1,7 @@
 "use client";
 
 import { PLANS, type PlanId } from "./plans";
-import { supabaseBrowser } from "./supabase-browser"; // Added for session extraction
+import { supabaseBrowser } from "./supabase-browser";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -27,10 +27,10 @@ export async function startCheckout(opts: {
   plan: PlanId;
   name?: string;
   email?: string;
+  phone?: string; // ADDED PHONE HERE
   prefill: { name?: string; email: string; contact?: string };
 }): Promise<CheckoutResult> {
   
-  // 1) Get the Supabase token established by EmailOtp
   const { data } = await supabaseBrowser().auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error("Session expired. Please verify your email again.");
@@ -46,7 +46,8 @@ export async function startCheckout(opts: {
     body: JSON.stringify({ 
       plan: opts.plan, 
       name: opts.name, 
-      email: opts.email 
+      email: opts.email,
+      whatsapp: opts.phone // Pass the phone number to the backend
     }),
   });
   
@@ -64,8 +65,8 @@ export async function startCheckout(opts: {
       order_id: order.orderId,
       name: "Trade Zone Premium",
       description: PLANS[opts.plan].label,
-      prefill: { name: opts.prefill.name, email: opts.prefill.email },
-      readonly: { name: !!opts.prefill.name, email: true },
+      prefill: { name: opts.prefill.name, email: opts.prefill.email, contact: opts.prefill.contact },
+      readonly: { name: !!opts.prefill.name, email: true, contact: !!opts.prefill.contact },
       theme: { color: "#10231F" },
       modal: { ondismiss: () => resolve({ status: "cancelled" }) },
       handler: async (response: any) => {
