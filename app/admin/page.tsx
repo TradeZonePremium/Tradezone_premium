@@ -58,7 +58,6 @@ export default function AdminDashboard() {
     );
   }
 
-  // Beautiful Login Screen
   if (needsLogin) {
     return (
       <>
@@ -78,7 +77,6 @@ export default function AdminDashboard() {
     );
   }
   
-  // Beautiful Error / Access Denied Screen
   if (error) {
     return (
       <>
@@ -102,53 +100,95 @@ export default function AdminDashboard() {
     );
   }
 
-  // Beautiful Full Dashboard
+  // Calculate stats for the dashboard overview
+  const activeCount = data.filter(s => s.status === 'ACTIVE').length;
+  const pendingCount = data.filter(s => s.status === 'PENDING').length;
+
   return (
     <>
       <Header right={
         <button 
           onClick={async () => { await supabaseBrowser().auth.signOut(); setNeedsLogin(true); }} 
-          style={{ background: "none", border: "none", cursor: "pointer", fontWeight: "bold", color: "#d93025" }}
+          style={{ 
+            background: "#ffebee", color: "#d32f2f", border: "1px solid #ffcdd2", 
+            padding: "8px 16px", borderRadius: "8px", cursor: "pointer", 
+            fontWeight: "bold", fontSize: "14px", transition: "all 0.2s" 
+          }}
         >
           Sign Out
         </button>
       } />
       
-      <main style={{ padding: "40px 20px", maxWidth: "1200px", margin: "0 auto", fontFamily: "sans-serif" }}>
-        <h1 style={{ marginBottom: "24px", color: "#10231F" }}>Admin Dashboard</h1>
+      <main style={{ padding: "40px 20px", maxWidth: "1100px", margin: "0 auto", fontFamily: "sans-serif" }}>
         
-        <div style={{ background: "#fff", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.05)", overflow: "hidden" }}>
+        {/* Page Title */}
+        <div style={{ marginBottom: "32px" }}>
+          <h1 style={{ margin: "0 0 8px 0", color: "#10231F", fontSize: "32px", letterSpacing: "-0.5px" }}>Community Dashboard</h1>
+          <p style={{ margin: 0, color: "#5b6b66", fontSize: "16px" }}>Manage your members and track active subscriptions.</p>
+        </div>
+
+        {/* Stats Row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px", marginBottom: "32px" }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "12px", color: "#5b6b66", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Total Members</div>
+            <div style={{ fontSize: "36px", fontWeight: "bold", color: "#10231F", lineHeight: "1" }}>{data.length}</div>
+          </div>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "12px", color: "#5b6b66", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Active</div>
+            <div style={{ fontSize: "36px", fontWeight: "bold", color: "#166534", lineHeight: "1" }}>{activeCount}</div>
+          </div>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "12px", color: "#5b6b66", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>Pending</div>
+            <div style={{ fontSize: "36px", fontWeight: "bold", color: "#854d0e", lineHeight: "1" }}>{pendingCount}</div>
+          </div>
+        </div>
+        
+        {/* Modern Table */}
+        <div style={{ background: "#fff", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.05)", overflow: "hidden", border: "1px solid #e2e8f0" }}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-              <thead style={{ background: "#f8faf9", borderBottom: "1px solid #e2e8f0" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", whiteSpace: "nowrap" }}>
+              <thead style={{ background: "#10231F", color: "#ffffff" }}>
                 <tr>
-                  <th style={{ padding: "16px", color: "#5b6b66", fontWeight: "bold" }}>Name</th>
-                  <th style={{ padding: "16px", color: "#5b6b66", fontWeight: "bold" }}>Email</th>
-                  <th style={{ padding: "16px", color: "#5b6b66", fontWeight: "bold" }}>Phone</th>
-                  <th style={{ padding: "16px", color: "#5b6b66", fontWeight: "bold" }}>Plan</th>
-                  <th style={{ padding: "16px", color: "#5b6b66", fontWeight: "bold" }}>Status</th>
-                  <th style={{ padding: "16px", color: "#5b6b66", fontWeight: "bold" }}>Expiry Date</th>
+                  <th style={{ padding: "16px 24px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "600" }}>Member Name</th>
+                  <th style={{ padding: "16px 24px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "600" }}>Contact Info</th>
+                  <th style={{ padding: "16px 24px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "600" }}>Plan</th>
+                  <th style={{ padding: "16px 24px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "600" }}>Status</th>
+                  <th style={{ padding: "16px 24px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "600" }}>Expiry</th>
                 </tr>
               </thead>
               <tbody>
                 {data.map((sub, i) => (
-                  <tr key={sub.id} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                    <td style={{ padding: "16px", color: "#10231F", fontWeight: "bold" }}>{sub.name}</td>
-                    <td style={{ padding: "16px", color: "#5b6b66" }}>{sub.email}</td>
-                    <td style={{ padding: "16px", color: "#5b6b66" }}>{sub.whatsapp_number || "—"}</td>
-                    <td style={{ padding: "16px", color: "#5b6b66" }}>{sub.plan}</td>
-                    <td style={{ padding: "16px" }}>
+                  <tr key={sub.id} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fbfdfc" }}>
+                    <td style={{ padding: "16px 24px" }}>
+                      <div style={{ fontWeight: "bold", color: "#10231F", fontSize: "15px" }}>{sub.name}</div>
+                    </td>
+                    <td style={{ padding: "16px 24px" }}>
+                      <div style={{ color: "#475569", fontSize: "14px", marginBottom: "4px" }}>✉️ {sub.email}</div>
+                      <div style={{ color: "#475569", fontSize: "14px" }}>📱 {sub.whatsapp_number || "—"}</div>
+                    </td>
+                    <td style={{ padding: "16px 24px", color: "#475569", fontSize: "14px", fontWeight: "600" }}>{sub.plan}</td>
+                    <td style={{ padding: "16px 24px" }}>
                       <span style={{
-                        padding: "6px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold",
+                        padding: "6px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold", display: "inline-block",
                         background: sub.status === 'ACTIVE' ? '#dcfce7' : sub.status === 'EXPIRED' ? '#fee2e2' : '#fef9c3',
-                        color: sub.status === 'ACTIVE' ? '#166534' : sub.status === 'EXPIRED' ? '#991b1b' : '#854d0e'
+                        color: sub.status === 'ACTIVE' ? '#166534' : sub.status === 'EXPIRED' ? '#991b1b' : '#854d0e',
+                        border: `1px solid ${sub.status === 'ACTIVE' ? '#bbf7d0' : sub.status === 'EXPIRED' ? '#fecaca' : '#fef08a'}`
                       }}>
                         {sub.status}
                       </span>
                     </td>
-                    <td style={{ padding: "16px", color: "#5b6b66" }}>{sub.expiry_date ? formatDate(sub.expiry_date) : "—"}</td>
+                    <td style={{ padding: "16px 24px", color: "#475569", fontSize: "14px", fontWeight: "500" }}>
+                      {sub.expiry_date ? formatDate(sub.expiry_date) : "—"}
+                    </td>
                   </tr>
                 ))}
+                {data.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#5b6b66" }}>
+                      No members found yet.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
