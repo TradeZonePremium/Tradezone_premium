@@ -1,22 +1,15 @@
 import { supabaseAdmin } from "./supabase-server";
 import { addMonths, maxDate, todayIST } from "./dates";
 import { PLANS, isPlanId } from "./plans";
-import { sendPremiumGroupInvite } from "./whatsapp";
-import { sendEmail } from "./email"; // Ensure your email utility is imported
+import { sendPaymentSuccessEmail } from "./email"; 
+import { randomUUID } from "crypto";
+
+// import { sendPremiumGroupInvite } from "./whatsapp"; // Commented out WhatsApp API
 
 export type ActivateResult =
   | { ok: true; alreadyProcessed: boolean }
   | { ok: false; error: string };
 
-/**
- * Marks a payment as paid and activates / extends the subscription.
- *
- * IDEMPOTENT:
- * Called from both /api/orders/verify and the Razorpay webhook.
- * Only the first request claims the payment.
- *
- * Call this only after the Razorpay payment/signature has been verified.
- */
 export async function activatePayment(
   orderId: string,
   paymentId: string
@@ -36,81 +29,35 @@ export async function activatePayment(
     .select()
     .maybeSingle();
 
-  if (claimErr) {
-    return {
-      ok: false,
-      error: claimErr.message,
-    };
-  }
+  if (claimErr) return { ok: false, error: claimErr.message };
 
   if (!claimed) {
-    // Already processed or unknown order.
-    const { data: existing } = await db
-      .from("payments")
-      .select("status")
-      .eq("razorpay_order_id", orderId)
-      .maybeSingle();
-
-    if (existing?.status === "PAID") {
-      return {
-        ok: true,
-        alreadyProcessed: true,
-      };
-    }
-
-    return {
-      ok: false,
-      error: "Unknown order",
-    };
+    const { data: existing } = await db.from("payments").select("status").eq("razorpay_order_id", orderId).maybeSingle();
+    if (existing?.status === "PAID") return { ok: true, alreadyProcessed: true };
+    return { ok: false, error: "Unknown order" };
   }
 
   // 2) Load subscription.
   const revert = async () => {
-    await db
-      .from("payments")
-      .update({
-        status: "CREATED",
-        razorpay_payment_id: null,
-        paid_at: null,
-      })
-      .eq("razorpay_order_id", orderId);
+    await db.from("payments").update({ status: "CREATED", razorpay_payment_id: null, paid_at: null }).eq("razorpay_order_id", orderId);
   };
 
-  const { data: sub, error: subErr } = await db
-    .from("subscriptions")
-    .select("*")
-    .eq("id", claimed.subscription_id)
-    .single();
-
+  const { data: sub, error: subErr } = await db.from("subscriptions").select("*").eq("id", claimed.subscription_id).single();
   const planId: unknown = claimed.plan;
 
   if (subErr || !sub || !isPlanId(planId)) {
     await revert();
-
-    return {
-      ok: false,
-      error: subErr?.message || "Subscription or plan not found",
-    };
+    return { ok: false, error: subErr?.message || "Subscription or plan not found" };
   }
 
   // 3) Calculate subscription dates.
   const today = todayIST();
+  const stillActive = sub.status === "ACTIVE" && sub.expiry_date && sub.expiry_date >= today;
+  const startDate = stillActive ? maxDate(sub.expiry_date, today) : today;
+  const expiryDate = addMonths(startDate, PLANS[planId].months);
 
-  const stillActive =
-    sub.status === "ACTIVE" &&
-    sub.expiry_date &&
-    sub.expiry_date >= today;
-
-  const startDate = stillActive
-    ? maxDate(sub.expiry_date, today)
-    : today;
-
-  const expiryDate = addMonths(
-    startDate,
-    PLANS[planId].months
-  );
-
-  // 4) Update subscription.
+  // 4) Update subscription and generate one-time join token
+  const joinToken = randomUUID(); // Create secure token for masked route
   const { error: updErr } = await db
     .from("subscriptions")
     .update({
@@ -121,6 +68,7 @@ export async function activatePayment(
       start_date: startDate,
       expiry_date: expiryDate,
       status: "ACTIVE",
+      join_token: joinToken, // Ensure your database has this column
       reminder_sent: false,
       expired_email_sent: false,
       updated_at: new Date().toISOString(),
@@ -129,43 +77,32 @@ export async function activatePayment(
 
   if (updErr) {
     await revert();
-
-    return {
-      ok: false,
-      error: updErr.message,
-    };
+    return { ok: false, error: updErr.message };
   }
 
-  // 5) Dual Post-Payment Delivery: Send WhatsApp group invite AND Email notification simultaneously.
+  // 5) Email-Only Delivery with Masked Link
   try {
-    const inviteLink = "https://chat.whatsapp.com/YourActualGroupInviteLink"; // Replace with your group link
-
-    // A) Send via WhatsApp Template
+    /* WHATSAPP DIRECT MESSAGE COMMENTED OUT
     if (sub.whatsapp_number) {
       await sendPremiumGroupInvite(sub.whatsapp_number, inviteLink);
-      console.log("[activate] WhatsApp group invitation sent.");
-    } else {
-      console.error("[activate] WhatsApp number is missing.");
-    }
+    } 
+    */
 
-    // B) Send via Email
     if (sub.email) {
-      await sendEmail({
+      await sendPaymentSuccessEmail({
         to: sub.email,
-        subject: "Your Trade Zone Premium Group Invite Link",
-        text: `Payment successful! Thank you for joining Trade Zone Premium. Access your private community group here: ${inviteLink}`
+        name: sub.name || "Customer",
+        plan: claimed.plan as string,
+        amount: claimed.amount,
+        startDate: startDate,
+        expiryDate: expiryDate,
+        joinToken: joinToken, // The token is appended to the masked route in lib/email.ts
       });
-      console.log("[activate] Email notification dispatched.");
-    } else {
-      console.error("[activate] Email address is missing.");
+      console.log("[activate] Email success notification dispatched with masked link.");
     }
   } catch (err) {
     console.error("[activate] Notification delivery failed:", err);
   }
 
-  // 6) Payment activation completed.
-  return {
-    ok: true,
-    alreadyProcessed: false,
-  };
+  return { ok: true, alreadyProcessed: false };
 }
