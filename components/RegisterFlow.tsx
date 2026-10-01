@@ -12,9 +12,7 @@ export default function RegisterFlow() {
   const [plan, setPlan] = useState<PlanId>("1M");
   const [name, setName] = useState("");
   
-  // Track only the verified email, as EmailOtp handles the input field internally
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
-
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ plan: string; start_date: string; expiry_date: string; } | null>(null);
@@ -36,8 +34,7 @@ export default function RegisterFlow() {
       const result = await startCheckout({
         plan,
         name: name.trim(),
-        // Pass empty string for whatsapp to satisfy your existing checkout-client.ts type definition
-        whatsapp: "", 
+        email: verifiedEmail, // Correctly passing email instead of whatsapp
         prefill: {
           name: name.trim(),
           email: verifiedEmail,
@@ -100,7 +97,6 @@ export default function RegisterFlow() {
           />
         </div>
 
-        {/* EMAIL OTP WIDGET - Fixed props to match your component's types */}
         <div className="field">
           <EmailOtp
             onVerified={(data) => setVerifiedEmail(data.email)}
