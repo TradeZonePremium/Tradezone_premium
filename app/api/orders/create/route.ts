@@ -17,9 +17,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Enter a valid full name." }, { status: 400 });
     }
 
+    // Extract the phone number safely
+    const whatsapp = typeof body.whatsapp === "string" ? body.whatsapp.replace(/\D/g, "") : "";
+
     const db = supabaseAdmin();
 
-    // 1) STRICT EMAIL AUTH CHECK
     const user = await getUserFromRequest(req).catch(() => null);
     if (!user || !user.email) {
       return NextResponse.json(
@@ -28,15 +30,8 @@ export async function POST(req: Request) {
       );
     }
 
-    /* WHATSAPP CHECK COMMENTED OUT
-    const whatsapp = body.whatsapp...
-    const { data: verification } = await db.from("phone_verifications")...
-    if (!verification) { return error; }
-    */
-
     const userEmail = user.email;
 
-    // 2) Find or create the customer row safely
     let subscriptionId: string;
     const { data: existing, error: findErr } = await db
       .from("subscriptions")
@@ -53,6 +48,7 @@ export async function POST(req: Request) {
           user_id: user.id,
           name, 
           email: userEmail, 
+          whatsapp_number: whatsapp, // SAVE TO DB
           status: "PENDING" 
         })
         .select("id")
@@ -64,11 +60,11 @@ export async function POST(req: Request) {
       await db.from("subscriptions").update({
         name,
         user_id: user.id,
+        whatsapp_number: whatsapp, // UPDATE DB
         updated_at: new Date().toISOString()
       }).eq("id", subscriptionId);
     }
 
-    // 3) Create Razorpay Order
     const price = PLANS[plan].price;
     const order = await razorpay().orders.create({
       amount: price * 100,
