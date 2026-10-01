@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import EmailOtp from "./EmailOtp"; // NEW: Importing Email OTP
-// import WhatsAppOtp from "./WhatsAppOtp"; // Commented out WhatsApp
+import EmailOtp from "./EmailOtp"; 
 import PlanPicker from "./PlanPicker";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { startCheckout } from "@/lib/checkout-client";
@@ -12,12 +11,9 @@ export default function RegisterFlow() {
   const [stage, setStage] = useState<"plan" | "details">("plan");
   const [plan, setPlan] = useState<PlanId>("1M");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  
+  // Track only the verified email, as EmailOtp handles the input field internally
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
-
-  // WhatsApp states commented out:
-  // const [whatsapp, setWhatsapp] = useState("");
-  // const [verifiedWhatsapp, setVerifiedWhatsapp] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -40,7 +36,8 @@ export default function RegisterFlow() {
       const result = await startCheckout({
         plan,
         name: name.trim(),
-        email: verifiedEmail,
+        // Pass empty string for whatsapp to satisfy your existing checkout-client.ts type definition
+        whatsapp: "", 
         prefill: {
           name: name.trim(),
           email: verifiedEmail,
@@ -103,20 +100,13 @@ export default function RegisterFlow() {
           />
         </div>
 
-        {/* EMAIL OTP WIDGET */}
+        {/* EMAIL OTP WIDGET - Fixed props to match your component's types */}
         <div className="field">
           <EmailOtp
-            email={email}
-            onEmailChange={setEmail}
-            onVerified={(mail) => setVerifiedEmail(mail)}
+            onVerified={(data) => setVerifiedEmail(data.email)}
             onReset={() => setVerifiedEmail(null)}
           />
         </div>
-
-        {/* WHATSAPP WIDGET COMMENTED OUT */}
-        {/* <div className="field">
-          <WhatsAppOtp ... />
-        </div> */}
 
         {error && <p className="error" role="alert">{error}</p>}
 
