@@ -27,7 +27,7 @@ export async function startCheckout(opts: {
   plan: PlanId;
   name?: string;
   email?: string;
-  phone?: string; // ADDED PHONE HERE
+  phone?: string; // THIS FIXES THE BUILD ERROR
   prefill: { name?: string; email: string; contact?: string };
 }): Promise<CheckoutResult> {
   
@@ -47,7 +47,7 @@ export async function startCheckout(opts: {
       plan: opts.plan, 
       name: opts.name, 
       email: opts.email,
-      whatsapp: opts.phone // Pass the phone number to the backend
+      whatsapp: opts.phone // Pass the phone number to the backend API
     }),
   });
   
