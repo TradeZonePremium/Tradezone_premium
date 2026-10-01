@@ -13,57 +13,35 @@ export async function POST(req: Request) {
     if (!isPlanId(plan)) return NextResponse.json({ error: "Invalid plan." }, { status: 400 });
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
-    const whatsapp = typeof body.whatsapp === "string" ? body.whatsapp.replace(/\D/g, "") : "";
-    const emailInput = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-
-    const nameOk = name.length >= 2 && name.length <= 100;
-    const waOk = whatsapp.length >= 10 && whatsapp.length <= 15;
-
-    if (!nameOk || !waOk) {
-      return NextResponse.json(
-        { error: "Enter your full name and a valid WhatsApp number (10-15 digits)." },
-        { status: 400 }
-      );
+    if (name.length < 2 || name.length > 100) {
+      return NextResponse.json({ error: "Enter a valid full name." }, { status: 400 });
     }
 
     const db = supabaseAdmin();
 
-    // EITHER/OR AUTH CHECK:
-    // 1) Check if user has an active email session via Supabase
+    // 1) STRICT EMAIL AUTH CHECK
     const user = await getUserFromRequest(req).catch(() => null);
-    const hasEmailSession = !!user?.email;
-
-    // 2) Check if user has a verified WhatsApp OTP record
-    let hasValidWhatsapp = false;
-    if (whatsapp) {
-      const { data: verification } = await db
-        .from("phone_verifications")
-        .select("*")
-        .eq("phone", whatsapp)
-        .order("expires_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      hasValidWhatsapp = !!verification && new Date() <= new Date(verification.expires_at);
-    }
-
-    // If NEITHER method is verified, block order creation
-    if (!hasEmailSession && !hasValidWhatsapp) {
+    if (!user || !user.email) {
       return NextResponse.json(
-        { error: "Please verify either your email or your WhatsApp number with OTP to continue." },
+        { error: "Please verify your email with OTP to continue." },
         { status: 401 }
       );
     }
 
-    // Determine the primary identifier for the subscription row
-    const userEmail = user?.email || emailInput || null;
+    /* WHATSAPP CHECK COMMENTED OUT
+    const whatsapp = body.whatsapp...
+    const { data: verification } = await db.from("phone_verifications")...
+    if (!verification) { return error; }
+    */
 
-    // Find or create the customer row safely
+    const userEmail = user.email;
+
+    // 2) Find or create the customer row safely
     let subscriptionId: string;
     const { data: existing, error: findErr } = await db
       .from("subscriptions")
       .select("id")
-      .or(`whatsapp_number.eq.${whatsapp}${userEmail ? `,email.eq.${userEmail}` : ""}`)
+      .eq("email", userEmail)
       .maybeSingle();
 
     if (findErr) throw findErr;
@@ -72,10 +50,9 @@ export async function POST(req: Request) {
       const { data: created, error: insErr } = await db
         .from("subscriptions")
         .insert({ 
-          user_id: user?.id || null,
+          user_id: user.id,
           name, 
           email: userEmail, 
-          whatsapp_number: whatsapp, 
           status: "PENDING" 
         })
         .select("id")
@@ -84,22 +61,20 @@ export async function POST(req: Request) {
       subscriptionId = created.id;
     } else {
       subscriptionId = existing.id;
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (nameOk) patch.name = name;
-      if (userEmail) patch.email = userEmail;
-      if (waOk) patch.whatsapp_number = whatsapp;
-      if (user?.id) patch.user_id = user.id;
-      
-      await db.from("subscriptions").update(patch).eq("id", subscriptionId);
+      await db.from("subscriptions").update({
+        name,
+        user_id: user.id,
+        updated_at: new Date().toISOString()
+      }).eq("id", subscriptionId);
     }
 
-    // Create Razorpay Order
+    // 3) Create Razorpay Order
     const price = PLANS[plan].price;
     const order = await razorpay().orders.create({
       amount: price * 100,
       currency: "INR",
       receipt: `tz_${Date.now()}`,
-      notes: { subscription_id: subscriptionId, whatsapp, plan },
+      notes: { subscription_id: subscriptionId, plan },
     });
 
     const { error: payErr } = await db.from("payments").insert({
