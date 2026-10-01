@@ -10,9 +10,11 @@ import { formatDate } from "@/lib/dates";
 export default function RegisterFlow() {
   const [stage, setStage] = useState<"plan" | "details">("plan");
   const [plan, setPlan] = useState<PlanId>("1M");
-  const [name, setName] = useState("");
   
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState(""); // NEW: Simple phone state
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ plan: string; start_date: string; expiry_date: string; } | null>(null);
@@ -22,6 +24,12 @@ export default function RegisterFlow() {
 
     if (!name.trim() || name.trim().length < 2) {
       return setError("Enter your full name.");
+    }
+    
+    // Ensure they enter a valid phone number (just length validation)
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length < 10) {
+      return setError("Enter a valid mobile number (at least 10 digits).");
     }
 
     if (!verifiedEmail) {
@@ -34,10 +42,12 @@ export default function RegisterFlow() {
       const result = await startCheckout({
         plan,
         name: name.trim(),
-        email: verifiedEmail, // Correctly passing email instead of whatsapp
+        email: verifiedEmail,
+        phone: digitsOnly, // Passing the phone number
         prefill: {
           name: name.trim(),
           email: verifiedEmail,
+          contact: digitsOnly, // Prefills Razorpay so they don't have to type it again
         },
       });
 
@@ -97,6 +107,19 @@ export default function RegisterFlow() {
           />
         </div>
 
+        {/* NEW: Mobile Number Field */}
+        <div className="field">
+          <label className="label" htmlFor="phone">WhatsApp / Mobile Number</label>
+          <input
+            id="phone"
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+            placeholder="e.g. 919876543210"
+            maxLength={15}
+          />
+        </div>
+
         <div className="field">
           <EmailOtp
             onVerified={(data) => setVerifiedEmail(data.email)}
@@ -110,7 +133,7 @@ export default function RegisterFlow() {
           type="button"
           className="btn btn-primary wide mt-4"
           onClick={pay}
-          disabled={busy || !verifiedEmail || !name.trim()}
+          disabled={busy || !verifiedEmail || !name.trim() || phone.length < 10}
         >
           {busy ? "Opening payment…" : `Pay ₹${PLANS[plan].price}`}
         </button>
