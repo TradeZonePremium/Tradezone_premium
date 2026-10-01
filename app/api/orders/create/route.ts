@@ -17,12 +17,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Enter a valid full name." }, { status: 400 });
     }
 
-    // Extract the phone number safely
     const whatsapp = typeof body.whatsapp === "string" ? body.whatsapp.replace(/\D/g, "") : "";
-
     const db = supabaseAdmin();
-
     const user = await getUserFromRequest(req).catch(() => null);
+    
     if (!user || !user.email) {
       return NextResponse.json(
         { error: "Please verify your email with OTP to continue." },
@@ -31,8 +29,8 @@ export async function POST(req: Request) {
     }
 
     const userEmail = user.email;
-
     let subscriptionId: string;
+    
     const { data: existing, error: findErr } = await db
       .from("subscriptions")
       .select("id")
@@ -48,7 +46,8 @@ export async function POST(req: Request) {
           user_id: user.id,
           name, 
           email: userEmail, 
-          whatsapp_number: whatsapp, // SAVE TO DB
+          whatsapp_number: whatsapp,
+          plan: plan, // THIS SAVES THE CORRECT PLAN NAME
           status: "PENDING" 
         })
         .select("id")
@@ -60,7 +59,8 @@ export async function POST(req: Request) {
       await db.from("subscriptions").update({
         name,
         user_id: user.id,
-        whatsapp_number: whatsapp, // UPDATE DB
+        whatsapp_number: whatsapp, 
+        plan: plan, // THIS UPDATES THE CORRECT PLAN NAME
         updated_at: new Date().toISOString()
       }).eq("id", subscriptionId);
     }
