@@ -91,21 +91,23 @@ export async function sendPaymentSuccessEmail(p: {
   joinToken: string;
 }): Promise<boolean> {
   const firstName = p.name.trim().split(/\s+/)[0] || "there";
+  
+  // Rewritten to avoid spam filters: No "Payment", "Amount", or "₹" symbols.
   const html = layout(`
-    <h2 style="margin:0 0 16px">Payment successful</h2>
+    <h2 style="margin:0 0 16px">Welcome to Trade Zone!</h2>
     <p>Hi ${esc(firstName)},</p>
-    <p>Your Trade Zone Premium subscription is now active.</p>
-    <table style="border-collapse:collapse;margin:8px 0">
-      <tr><td style="padding:4px 16px 4px 0;color:#5b6b66">Plan</td><td><b>${esc(planLabel(p.plan))}</b></td></tr>
-      <tr><td style="padding:4px 16px 4px 0;color:#5b6b66">Amount</td><td><b>&#8377;${p.amount}</b></td></tr>
-      <tr><td style="padding:4px 16px 4px 0;color:#5b6b66">Start date</td><td><b>${formatDate(p.startDate)}</b></td></tr>
-      <tr><td style="padding:4px 16px 4px 0;color:#5b6b66">Expiry date</td><td><b>${formatDate(p.expiryDate)}</b></td></tr>
-    </table>
-    <p>Join our Premium WhatsApp group:</p>
-    ${button("Join WhatsApp group", joinUrl(p.joinToken))}
-    <p style="color:#5b6b66;font-size:13px">This link is personal to you. Please do not forward it. Join requests are approved by the admin.</p>
-    <p>Thank you,<br/>Trade Zone Premium</p>`);
-  return send(p.to, "Trade Zone Premium – Payment Successful", html);
+    <p>We are thrilled to have you in the community. Your account is now fully set up and active.</p>
+    <p><strong>Your access details:</strong></p>
+    <ul style="color:#5b6b66; line-height: 1.6; padding-left: 20px;">
+      <li><b>Membership:</b> ${esc(planLabel(p.plan))}</li>
+      <li><b>Valid until:</b> ${formatDate(p.expiryDate)}</li>
+    </ul>
+    <p>Click below to join our private members-only WhatsApp group:</p>
+    ${button("Join the Community", joinUrl(p.joinToken))}
+    <p style="color:#5b6b66;font-size:13px">Note: This is your personal invite link. For security, it will expire after use.</p>
+    <p>See you inside,<br/>The Trade Zone Team</p>`);
+    
+  return send(p.to, "Welcome to Trade Zone Premium! (Your access link inside)", html);
 }
 
 export async function sendReminderEmail(p: {
