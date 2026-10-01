@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     const token = searchParams.get("token");
 
     if (!token) {
-      return NextResponse.json({ error: "Missing token" }, { status: 400 });
+      return new Response("Missing or invalid access token.", { status: 400 });
     }
 
     const db = supabaseAdmin();
@@ -22,21 +22,28 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (error || !sub) {
-      return NextResponse.json({ error: "Invalid or expired link." }, { status: 404 });
+      // Return a user-friendly HTML error message instead of raw JSON
+      return new Response(
+        "<h2>Invalid, expired, or already used access link.</h2><p>Each link is valid for one-time use only. If you need a new link, please contact support.</p>", 
+        { status: 404, headers: { "Content-Type": "text/html" } }
+      );
     }
 
-    // 2. Pull your secure WhatsApp group invite link from Vercel environment variables
+    // 2. ONE-TIME USE ENFORCEMENT: Nullify the token so it can never be used again
+    await db.from("subscriptions").update({ join_token: null }).eq("id", sub.id);
+
+    // 3. Pull your secure WhatsApp group invite link
     const targetUrl = process.env.WHATSAPP_GROUP_INVITE_URL;
 
     if (!targetUrl) {
-      return NextResponse.json({ error: "WhatsApp group link not configured." }, { status: 500 });
+      return new Response("WhatsApp group link not configured.", { status: 500 });
     }
 
-    // 3. Securely redirect to the WhatsApp group
+    // 4. Securely redirect to the WhatsApp group
     return NextResponse.redirect(targetUrl);
     
   } catch (err: any) {
     console.error("[join] Error:", err);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+    return new Response("Something went wrong", { status: 500 });
   }
 }
