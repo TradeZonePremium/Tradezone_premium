@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({
             chat_id: GROUP_ID,
-            user_id: 1090578268,
+            user_id: 5510934074,
             revoke_messages: false,
           }),
         }
