@@ -107,6 +107,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // /groupid
+    if (text === "/groupid") {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `This chat/group ID is:\n${chatId}`,
+        }),
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Telegram webhook error:", error);
