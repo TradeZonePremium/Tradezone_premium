@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const GROUP_ID = -5501936412;
+
+// Only for testing.
+// This should be your admin/owner Telegram User ID.
+const ADMIN_USER_ID = 1090578268;
+
 export async function POST(req: NextRequest) {
   try {
     const update = await req.json();
@@ -48,7 +54,7 @@ export async function POST(req: NextRequest) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            chat_id: chatId,
+            chat_id: GROUP_ID,
             member_limit: 1,
           }),
         }
@@ -66,9 +72,7 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({
             chat_id: chatId,
-            text:
-              "❌ Invite link could not be generated.\n\n" +
-              "Please check that the bot has permission to invite users.",
+            text: "❌ Invite link could not be generated.",
           }),
         });
 
@@ -117,6 +121,45 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           chat_id: chatId,
           text: `This chat/group ID is:\n${chatId}`,
+        }),
+      });
+    }
+
+    // /remove
+    if (text === "/remove") {
+      if (userId !== ADMIN_USER_ID) {
+        return NextResponse.json({ ok: true });
+      }
+
+      const response = await fetch(
+        `https://api.telegram.org/bot${token}/banChatMember`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            chat_id: GROUP_ID,
+            user_id: 1090578268,
+            revoke_messages: false,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      console.log("Telegram remove result:", result);
+
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: result.ok
+            ? "✅ Test user was removed/banned from Trade Zone Premium."
+            : `❌ Remove failed: ${result.description || "Unknown error"}`,
         }),
       });
     }
