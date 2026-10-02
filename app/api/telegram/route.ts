@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // /start
     if (text === "/start") {
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
@@ -29,7 +30,64 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          text: "Welcome to Trade Zone Premium! 🚀\n\nYour Telegram bot is connected successfully.",
+          text:
+            "Welcome to Trade Zone Premium! 🚀\n\n" +
+            "Your Telegram bot is connected successfully.",
+        }),
+      });
+    }
+
+    // /invite
+    if (text === "/invite") {
+      const response = await fetch(
+        `https://api.telegram.org/bot${token}/createChatInviteLink`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            chat_id: chatId,
+            member_limit: 1,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        console.error("Telegram invite error:", result);
+
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text:
+              "❌ Invite link could not be generated.\n\n" +
+              "Please check that the bot has permission to invite users.",
+          }),
+        });
+
+        return NextResponse.json({ ok: true });
+      }
+
+      const inviteLink = result.result.invite_link;
+
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text:
+            "✅ New Trade Zone Premium invite link:\n\n" +
+            inviteLink +
+            "\n\n" +
+            "This link is limited to 1 member.",
         }),
       });
     }
