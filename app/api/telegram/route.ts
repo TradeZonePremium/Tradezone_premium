@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const message = update?.message;
     const chatId = message?.chat?.id;
     const text = message?.text;
+    const userId = message?.from?.id;
 
     if (!chatId) {
       return NextResponse.json({ ok: true });
@@ -88,6 +89,20 @@ export async function POST(req: NextRequest) {
             inviteLink +
             "\n\n" +
             "This link is limited to 1 member.",
+        }),
+      });
+    }
+
+    // /myid
+    if (text === "/myid") {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `Your Telegram User ID is:\n${userId}`,
         }),
       });
     }
