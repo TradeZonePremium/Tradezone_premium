@@ -3,7 +3,7 @@
 import { useState } from "react";
 import EmailOtp from "@/components/EmailOtp";
 import { PLANS, PlanId } from "@/lib/plans";
-import { openRazorpayCheckout } from "@/lib/checkout-client";
+import { startCheckout } from "@/lib/checkout-client";
 
 export default function RegisterFlow() {
   const [step, setStep] = useState<"PLAN" | "DETAILS">("PLAN");
@@ -51,7 +51,7 @@ export default function RegisterFlow() {
       const orderData = await res.json();
       if (!res.ok) throw new Error(orderData.error || "Unable to initiate payment.");
 
-      await openRazorpayCheckout({
+      await startCheckout({
         orderId: orderData.orderId,
         amount: orderData.amount,
         currency: orderData.currency,
