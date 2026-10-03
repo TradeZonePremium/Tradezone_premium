@@ -1,10 +1,8 @@
 import { supabaseAdmin } from "./supabase-server";
 import { addMonths, maxDate, todayIST } from "./dates";
 import { PLANS, isPlanId } from "./plans";
-import { sendPaymentSuccessEmail } from "./email"; 
+import { sendPaymentSuccessEmail } from "./email";
 import { randomUUID } from "crypto";
-
-// import { sendPremiumGroupInvite } from "./whatsapp"; // Commented out WhatsApp API
 
 export type ActivateResult =
   | { ok: true; alreadyProcessed: boolean }
@@ -29,35 +27,102 @@ export async function activatePayment(
     .select()
     .maybeSingle();
 
-  if (claimErr) return { ok: false, error: claimErr.message };
+  if (claimErr) {
+    console.error("[activate] Payment claim failed:", claimErr);
+
+    return {
+      ok: false,
+      error: claimErr.message,
+    };
+  }
 
   if (!claimed) {
-    const { data: existing } = await db.from("payments").select("status").eq("razorpay_order_id", orderId).maybeSingle();
-    if (existing?.status === "PAID") return { ok: true, alreadyProcessed: true };
-    return { ok: false, error: "Unknown order" };
+    const { data: existing } = await db
+      .from("payments")
+      .select("status")
+      .eq("razorpay_order_id", orderId)
+      .maybeSingle();
+
+    if (existing?.status === "PAID") {
+      console.log(
+        "[activate] Payment was already processed:",
+        orderId
+      );
+
+      return {
+        ok: true,
+        alreadyProcessed: true,
+      };
+    }
+
+    return {
+      ok: false,
+      error: "Unknown order",
+    };
   }
 
   // 2) Load subscription.
   const revert = async () => {
-    await db.from("payments").update({ status: "CREATED", razorpay_payment_id: null, paid_at: null }).eq("razorpay_order_id", orderId);
+    await db
+      .from("payments")
+      .update({
+        status: "CREATED",
+        razorpay_payment_id: null,
+        paid_at: null,
+      })
+      .eq("razorpay_order_id", orderId);
   };
 
-  const { data: sub, error: subErr } = await db.from("subscriptions").select("*").eq("id", claimed.subscription_id).single();
+  const { data: sub, error: subErr } = await db
+    .from("subscriptions")
+    .select("*")
+    .eq("id", claimed.subscription_id)
+    .single();
+
   const planId: unknown = claimed.plan;
 
   if (subErr || !sub || !isPlanId(planId)) {
     await revert();
-    return { ok: false, error: subErr?.message || "Subscription or plan not found" };
+
+    console.error(
+      "[activate] Subscription/plan error:",
+      subErr?.message || "Subscription or plan not found"
+    );
+
+    return {
+      ok: false,
+      error:
+        subErr?.message ||
+        "Subscription or plan not found",
+    };
   }
 
   // 3) Calculate subscription dates.
   const today = todayIST();
-  const stillActive = sub.status === "ACTIVE" && sub.expiry_date && sub.expiry_date >= today;
-  const startDate = stillActive ? maxDate(sub.expiry_date, today) : today;
-  const expiryDate = addMonths(startDate, PLANS[planId].months);
 
-  // 4) Update subscription and generate one-time join token
-  const joinToken = randomUUID(); // Create secure token for masked route
+  const stillActive =
+    sub.status === "ACTIVE" &&
+    sub.expiry_date &&
+    sub.expiry_date >= today;
+
+  const startDate = stillActive
+    ? maxDate(sub.expiry_date, today)
+    : today;
+
+  const expiryDate = addMonths(
+    startDate,
+    PLANS[planId].months
+  );
+
+  // 4) Generate secure Telegram connection token.
+  const joinToken = randomUUID();
+
+  console.log(
+    "[activate] Generated Telegram join token for subscription:",
+    sub.id
+  );
+
+  // 5) Activate subscription.
   const { error: updErr } = await db
     .from("subscriptions")
     .update({
@@ -68,7 +133,7 @@ export async function activatePayment(
       start_date: startDate,
       expiry_date: expiryDate,
       status: "ACTIVE",
-      join_token: joinToken, // Ensure your database has this column
+      join_token: joinToken,
       reminder_sent: false,
       expired_email_sent: false,
       updated_at: new Date().toISOString(),
@@ -77,32 +142,70 @@ export async function activatePayment(
 
   if (updErr) {
     await revert();
-    return { ok: false, error: updErr.message };
+
+    console.error(
+      "[activate] Subscription activation failed:",
+      updErr
+    );
+
+    return {
+      ok: false,
+      error: updErr.message,
+    };
   }
 
-  // 5) Email-Only Delivery with Masked Link
-  try {
-    /* WHATSAPP DIRECT MESSAGE COMMENTED OUT
-    if (sub.whatsapp_number) {
-      await sendPremiumGroupInvite(sub.whatsapp_number, inviteLink);
-    } 
-    */
+  console.log(
+    "[activate] Subscription activated:",
+    {
+      subscriptionId: sub.id,
+      plan: claimed.plan,
+      amount: claimed.amount,
+      startDate,
+      expiryDate,
+    }
+  );
 
-    if (sub.email) {
-      await sendPaymentSuccessEmail({
+  // 6) Send payment success email with Telegram link.
+  if (!sub.email) {
+    console.error(
+      "[activate] No customer email found. Telegram email not sent."
+    );
+  } else {
+    try {
+      console.log(
+        "[activate] Sending payment success email to:",
+        sub.email
+      );
+
+      const emailSent = await sendPaymentSuccessEmail({
         to: sub.email,
         name: sub.name || "Customer",
         plan: claimed.plan as string,
         amount: claimed.amount,
-        startDate: startDate,
-        expiryDate: expiryDate,
-        joinToken: joinToken, // The token is appended to the masked route in lib/email.ts
+        startDate,
+        expiryDate,
+        joinToken,
       });
-      console.log("[activate] Email success notification dispatched with masked link.");
+
+      if (emailSent) {
+        console.log(
+          "[activate] Payment success email SENT successfully."
+        );
+      } else {
+        console.error(
+          "[activate] Payment success email FAILED."
+        );
+      }
+    } catch (err) {
+      console.error(
+        "[activate] Notification delivery failed:",
+        err
+      );
     }
-  } catch (err) {
-    console.error("[activate] Notification delivery failed:", err);
   }
 
-  return { ok: true, alreadyProcessed: false };
-}
+  return {
+    ok: true,
+    alreadyProcessed: false,
+  };
+} 
