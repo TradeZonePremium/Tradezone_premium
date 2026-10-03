@@ -41,6 +41,15 @@ export const PLANS: Record<string, PlanDetails> = {
 
 export type PlanId = keyof typeof PLANS;
 
+// Checks if a string is a valid plan ID
 export function isPlanId(value: unknown): value is PlanId {
   return typeof value === "string" && value in PLANS;
+}
+
+// Determines which plans show up in the UI mapping
+export const visiblePlanIds: PlanId[] = ["1M", "2M", "3M", "TEST"];
+
+// Helper to get the human-readable label for a plan (used in emails and renew page)
+export function planLabel(id: PlanId): string {
+  return PLANS[id]?.name || String(id);
 }
